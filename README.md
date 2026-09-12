@@ -1,158 +1,33 @@
-# Welcome to your Bilt project
+# burnout buddy
 
-[![Built with Bilt](https://img.shields.io/endpoint?url=https%3A%2F%2Fapp.bilt.me%2Fapi%2Fbadge)](https://bilt.me)
+Your AI companion for clarity, focus, and everyday wellbeing.
 
-## Project info
+# Our idea
 
-**Project URL**: https://app.bilt.me/agent/ec4051a7-8a50-4e42-8432-ae9ab96c1f36
+Life is spread across to-do lists, habit trackers, journals, and wellbeing apps. buddy aims to bring these pieces together, helping you make sense of what is on your mind and choose a manageable next step.
 
-**Project ID**: `ec4051a7-8a50-4e42-8432-ae9ab96c1f36`
+We are building an app for phones and tablets that combines personal priorities, supportive AI conversations, and daily reflection.
 
-## How can I edit this app?
+# Planned features
 
-There are several ways of editing your application.
+AI Braindump: Capture your thoughts and tasks, then organize them around your values, goals, and priorities.
 
-**Use Bilt**
+AI Coach: Get conversational support to stay focused, explore ideas, and work towards your goals.
 
-Simply visit your [Bilt Project](https://app.bilt.me/agent/ec4051a7-8a50-4e42-8432-ae9ab96c1f36) and start sending messages. Describe what you want to change, add, or fix in natural language.
+AI Reflect: Reflect on your day alongside your habits and progress.
 
-Changes made via Bilt are instant - just send a message and your app updates.
+Daily wellbeing actions: Explore three manageable actions based on your goals and current priorities.
 
-**Use your preferred IDE**
+Purpose Finder: Discover guided questions to explore what matters to you.
 
-If you want to work locally using your own IDE, you can export the source code from Bilt and make changes directly.
+Talking avatar: Interact with a friendly companion while background assistance helps organize your information.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Project status
 
-Follow these steps:
+Hackathon prototype for the AI.WOMEN Hackathon. The features above describe our intended scope; implementation is in progress.
 
-```sh
-# Step 1: Export and clone your Bilt project.
-# (Download source from Bilt or connect to your git repo)
-git clone <YOUR_GIT_URL>
+Setup instructions, implemented features, and demo links will be added as development progresses.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Responsible use
 
-# Step 3: Install the necessary dependencies.
-npm install
-
-# Step 4: Start the Expo development server.
-npx expo start
-```
-
-Scan the QR code with Expo Go on your phone to see your app running locally.
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- React Native
-- Expo
-- TypeScript
-- AsyncStorage (local data persistence)
-- Expo Router (navigation)
-
-All generated automatically by Bilt from your natural language instructions.
-
-## How can I test this project?
-
-**Option 1: Preview in Bilt (Recommended)**
-
-Open your [Bilt Project](https://app.bilt.me/agent/ec4051a7-8a50-4e42-8432-ae9ab96c1f36) and use the built-in preview.
-
-Open **Deploy & Share** to create a revocable preview link or build the app on your iPhone.
-
-**Option 2: Run Locally**
-
-```sh
-npm install
-npx expo start
-```
-
-Then scan the QR code with Expo Go.
-
-## How can I deploy this project?
-
-Open your [Bilt Project](https://app.bilt.me/agent/ec4051a7-8a50-4e42-8432-ae9ab96c1f36), select **Deploy & Share**, then choose **Publish to web**, **Release on App Store**, or **Release on Play Store**.
-
-### Deploy with Bilt
-
-Publishing to web creates a public, installable web app at its own URL. Bilt also guides you through preparing native releases for the App Store and Play Store.
-
-## How can I make changes to my app?
-
-**Via Bilt (Easiest)**
-
-Visit your [Bilt Project](https://app.bilt.me/agent/ec4051a7-8a50-4e42-8432-ae9ab96c1f36) and send a message describing what you want:
-
-- "Add a dark mode toggle"
-- "Change the button color to blue"
-- "Add a new screen for user settings"
-- "Fix the navigation bar spacing"
-
-Bilt understands natural language and updates your app automatically.
-
-**Via Code**
-
-Export the source, make changes in your IDE, and test locally with `npx expo start`.
-
-## Can I use this with the MCP protocol?
-
-Yes! Bilt is available as a remote MCP server at `https://mcp.bilt.me/mcp`.
-
-Connect any MCP-compatible AI agent (Claude Desktop, OpenClaw, etc.) to programmatically build and modify mobile apps.
-
-**Example MCP integration:**
-
-```json
-{
-  "mcpServers": {
-    "bilt": {
-      "transport": {
-        "type": "sse",
-        "url": "https://mcp.bilt.me/mcp/sse",
-        "headers": {
-          "Authorization": "Bearer YOUR_API_KEY"
-        }
-      }
-    }
-  }
-}
-```
-
-Read more:
-
-- [Bilt MCP Documentation](https://bilt.me/docs)
-- [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.buildingapplications%2Fmcp/versions/latest)
-
-## Need help?
-
-- 📚 [Bilt Documentation](https://bilt.me/docs)
-- 💬 [Discord Community](https://discord.gg/3FqNgmSYdZ)
-- 🐦 [Twitter Updates](https://twitter.com/biltmeanapp)
-- 📧 Email: support@bilt.me
-
----
-
-<div align="center">
-
-**Built by AI. No code required.** ✨
-
-[Try Bilt](https://bilt.me) • [View Docs](https://bilt.me/docs) • [Docs MCP Server](https://bilt.me/docs/mcp)
-
-</div>
+buddy is designed for everyday wellbeing and self-reflection. It does not diagnose, treat, or guarantee the prevention of burnout, and it does not replace professional mental health care.
