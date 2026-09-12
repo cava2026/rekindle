@@ -1,42 +1,56 @@
-import { Home } from 'lucide-react-native';
+import { Compass, House, Settings, Target } from 'lucide-react-native';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useThemeColor } from 'heroui-native';
-import { useUniwind } from 'uniwind';
+
+import { BRAND_HEX } from '@/lib/content';
 
 export default function TabLayout() {
-  const { theme } = useUniwind();
-  const [background, foreground, border, accent, muted] = useThemeColor([
-    'background',
-    'foreground',
-    'border',
-    'accent',
-    'muted',
-  ]);
-
   return (
     <>
-      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="dark" />
       <Tabs
         screenOptions={{
-          headerStyle: { backgroundColor: background },
-          headerTintColor: foreground,
-          headerTitleStyle: { color: foreground },
+          headerStyle: { backgroundColor: BRAND_HEX.background },
+          headerTintColor: BRAND_HEX.foreground,
+          headerTitleStyle: { color: BRAND_HEX.foreground, fontWeight: '600' },
           headerShadowVisible: false,
-          sceneStyle: { backgroundColor: background },
+          sceneStyle: { backgroundColor: BRAND_HEX.background },
           tabBarStyle: {
-            backgroundColor: background,
-            borderTopColor: border,
+            backgroundColor: BRAND_HEX.surface,
+            borderTopColor: BRAND_HEX.border,
           },
-          tabBarActiveTintColor: accent,
-          tabBarInactiveTintColor: muted,
+          tabBarActiveTintColor: BRAND_HEX.lavender,
+          tabBarInactiveTintColor: BRAND_HEX.muted,
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
-            tabBarIcon: ({ color, size }) => <Home color={color} size={size ?? 24} />,
+            title: 'Today',
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => <House color={color} size={size ?? 24} />,
+          }}
+        />
+        <Tabs.Screen
+          name="align"
+          options={{
+            title: 'Align',
+            tabBarIcon: ({ color, size }) => <Compass color={color} size={size ?? 24} />,
+          }}
+        />
+        <Tabs.Screen
+          name="goals"
+          options={{
+            title: 'Goals',
+            tabBarIcon: ({ color, size }) => <Target color={color} size={size ?? 24} />,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
+            tabBarIcon: ({ color, size }) => <Settings color={color} size={size ?? 24} />,
           }}
         />
       </Tabs>

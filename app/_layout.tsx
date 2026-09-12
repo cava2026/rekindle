@@ -10,18 +10,24 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Spinner, useThemeColor } from 'heroui-native';
 import * as DevClient from 'expo-dev-client';
 import { HeroUINativeProvider } from 'heroui-native';
 import { Uniwind } from 'uniwind';
 import {
   ErrorBoundary as ExpoErrorBoundary,
   type ErrorBoundaryProps,
+  router,
   SplashScreen,
   Stack,
+  useSegments,
 } from 'expo-router';
 
+import { AuthProvider, useAuth } from '@/lib/auth';
+import { useProfile } from '@/lib/queries';
 import { initPostHog } from '@/lib/posthog';
 import { registerServiceWorker } from '@/lib/registerServiceWorker';
 import { reportErrorToParent } from '@/lib/reportPreviewError';
@@ -47,6 +53,12 @@ export { ErrorBoundary };
 Uniwind.setTheme('light');
 
 void SplashScreen.preventAutoHideAsync();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
+  },
+});
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -141,11 +153,94 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ title: 'Habits', headerShown: false }} />
-        </Stack>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
+        </QueryClientProvider>
         <InstallPrompt />
       </HeroUINativeProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/**
+ * Sends people to sign-in, onboarding or the app depending on session and
+ * whether they have finished the three onboarding steps.
+ */
+function AppNavigator() {
+  const { userId, initializing } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const segments = useSegments();
+  const [background, surface] = useThemeColor(['background', 'surface']);
+  const ready = !initializing && !(userId && profileLoading);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    const root = segments[0];
+    const inSignIn = root === 'sign-in';
+    const inOnboarding = root === 'onboarding';
+
+    if (!userId) {
+      if (!inSignIn) router.replace('/sign-in');
+      return;
+    }
+
+    const onboarded = Boolean(profile?.onboarding_completed_at);
+    if (!onboarded && !inOnboarding) {
+      router.replace('/onboarding/disclaimer');
+    } else if (onboarded && (inSignIn || inOnboarding)) {
+      router.replace('/(tabs)');
+    }
+  }, [ready, userId, profile?.onboarding_completed_at, segments]);
+
+  if (!ready) {
+    return (
+      <View className="bg-background flex-1 items-center justify-center">
+        <Spinner />
+      </View>
+    );
+  }
+
+  return (
+    <Stack screenOptions={{ contentStyle: { backgroundColor: background } }}>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="checkin"
+        options={{
+          presentation: 'modal',
+          title: 'Daily check-in',
+          contentStyle: { backgroundColor: surface },
+        }}
+      />
+      <Stack.Screen name="reset" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="crisis"
+        options={{
+          presentation: 'modal',
+          title: 'Support now',
+          contentStyle: { backgroundColor: surface },
+        }}
+      />
+      <Stack.Screen
+        name="goal-new"
+        options={{
+          presentation: 'modal',
+          title: 'New goal',
+          contentStyle: { backgroundColor: surface },
+        }}
+      />
+      <Stack.Screen
+        name="profile"
+        options={{
+          presentation: 'modal',
+          title: 'Your details',
+          contentStyle: { backgroundColor: surface },
+        }}
+      />
+    </Stack>
   );
 }
