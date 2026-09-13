@@ -16,6 +16,8 @@ export default function ResetLayout() {
       <Stack.Screen name="do" />
       <Stack.Screen name="why" />
       <Stack.Screen name="summary" />
+      <Stack.Screen name="history" />
+      <Stack.Screen name="[sessionId]" />
     </Stack>
   );
 }

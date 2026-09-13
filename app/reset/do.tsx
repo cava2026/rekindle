@@ -6,10 +6,20 @@ import { Check, Clock, Timer } from 'lucide-react-native';
 
 import { ResetStageHeader } from '@/components/ResetStageHeader';
 import { GesturePressable } from '@/components/ui/primitives/GesturePressable';
+import { useResetSessionFlow } from '@/hooks/useResetSessionFlow';
 import { CoachUnavailableError, localPlan, planFromItems } from '@/lib/coach';
 import { BRAND_HEX, COACH_UNAVAILABLE_MESSAGE } from '@/lib/content';
-import { useCoachContext, useResetItems, useUpdateResetSession } from '@/lib/queries';
+import {
+  useCoachContext,
+  useResetActions,
+  useResetItems,
+  useSaveResetActions,
+  useToggleResetAction,
+  useUpdateResetSession,
+} from '@/lib/queries';
+import { resetRouteAtIndex } from '@/lib/navigation';
 import { useResetFlow } from '@/lib/resetStore';
+import type { ResetActionHorizon } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 function ActionRow({
@@ -50,14 +60,18 @@ function ActionRow({
 }
 
 export default function DoScreen() {
-  const sessionId = useResetFlow((state) => state.sessionId);
+  const flow = useResetSessionFlow();
+  const sessionId = flow.sessionId;
   const plan = useResetFlow((state) => state.plan);
   const degraded = useResetFlow((state) => state.coachDegraded);
   const setPlan = useResetFlow((state) => state.setPlan);
   const resetFlow = useResetFlow((state) => state.reset);
 
   const items = useResetItems(sessionId);
+  const actions = useResetActions(sessionId);
   const context = useCoachContext();
+  const saveActions = useSaveResetActions();
+  const toggleAction = useToggleResetAction();
   const updateSession = useUpdateResetSession();
 
   const [loading, setLoading] = useState(false);
@@ -81,10 +95,27 @@ export default function DoScreen() {
       const result = await planFromItems(payload, context);
       setPlan(result, false);
       if (sessionId) {
-        await updateSession.mutateAsync({
-          sessionId,
-          patch: { stage: 'do', why_prompt: result.why_prompt },
-        });
+        await Promise.all([
+          updateSession.mutateAsync({
+            sessionId,
+            patch: {
+              stage: 'do',
+              why_prompt: result.why_prompt,
+            },
+          }),
+          saveActions.mutateAsync({
+            sessionId,
+            actions: [
+              { title: result.next_five_minutes, horizon: 'next_five_minutes', sort: 0 },
+              ...result.today.map((title, sort) => ({ title, horizon: 'today' as const, sort })),
+              ...result.this_week.map((title, sort) => ({
+                title,
+                horizon: 'this_week' as const,
+                sort,
+              })),
+            ],
+          }),
+        ]);
       }
     } catch (caught) {
       if (!(caught instanceof CoachUnavailableError)) {
@@ -92,10 +123,42 @@ export default function DoScreen() {
       }
       const fallback = localPlan(payload);
       setPlan(fallback, true);
+      if (sessionId) {
+        try {
+          await Promise.all([
+            updateSession.mutateAsync({
+              sessionId,
+              patch: {
+                stage: 'do',
+                why_prompt: fallback.why_prompt,
+                coach_degraded: true,
+              },
+            }),
+            saveActions.mutateAsync({
+              sessionId,
+              actions: [
+                { title: fallback.next_five_minutes, horizon: 'next_five_minutes', sort: 0 },
+                ...fallback.today.map((title, sort) => ({
+                  title,
+                  horizon: 'today' as const,
+                  sort,
+                })),
+                ...fallback.this_week.map((title, sort) => ({
+                  title,
+                  horizon: 'this_week' as const,
+                  sort,
+                })),
+              ],
+            }),
+          ]);
+        } catch {
+          setError('The plan is visible, but it could not be saved. Please try again.');
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [items.data, context, sessionId, setPlan, updateSession]);
+  }, [items.data, context, sessionId, setPlan, updateSession, saveActions]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -112,7 +175,21 @@ export default function DoScreen() {
     router.replace('/(tabs)');
   };
 
-  const toggle = (key: string) => setDone((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggle = (key: string, horizon: ResetActionHorizon, title: string) => {
+    const saved = actions.data?.find(
+      (action) => action.horizon === horizon && action.title === title,
+    );
+    const currentlyCompleted = Object.hasOwn(done, key) ? done[key] : Boolean(saved?.completed_at);
+    const nextCompleted = !currentlyCompleted;
+    setDone((previous) => ({ ...previous, [key]: nextCompleted }));
+    if (saved && sessionId) {
+      toggleAction.mutate({
+        actionId: saved.id,
+        sessionId,
+        completed: nextCompleted,
+      });
+    }
+  };
 
   return (
     <View className="bg-background flex-1">
@@ -120,6 +197,8 @@ export default function DoScreen() {
         stage={3}
         title="One step, then the next"
         subtitle="Nothing here needs to be impressive. It needs to be doable."
+        maxStage={flow.maxStage}
+        onStagePress={flow.onStagePress}
         onClose={close}
       />
 
@@ -158,9 +237,20 @@ export default function DoScreen() {
                 variant="secondary"
                 size="sm"
                 className="self-start"
-                onPress={() => toggle('now')}
+                onPress={() => toggle('now', 'next_five_minutes', plan.next_five_minutes)}
               >
-                <Button.Label>{done.now ? 'Done, nice work' : 'Mark it done'}</Button.Label>
+                <Button.Label>
+                  {(done.now ??
+                  Boolean(
+                    actions.data?.find(
+                      (saved) =>
+                        saved.horizon === 'next_five_minutes' &&
+                        saved.title === plan.next_five_minutes,
+                    )?.completed_at,
+                  ))
+                    ? 'Done, nice work'
+                    : 'Mark it done'}
+                </Button.Label>
               </Button>
             </View>
 
@@ -173,8 +263,15 @@ export default function DoScreen() {
                 <ActionRow
                   key={action}
                   label={action}
-                  done={done[`today:${action}`]}
-                  onToggle={() => toggle(`today:${action}`)}
+                  done={
+                    done[`today:${action}`] ??
+                    Boolean(
+                      actions.data?.find(
+                        (saved) => saved.horizon === 'today' && saved.title === action,
+                      )?.completed_at,
+                    )
+                  }
+                  onToggle={() => toggle(`today:${action}`, 'today', action)}
                 />
               ))}
             </View>
@@ -188,8 +285,15 @@ export default function DoScreen() {
                 <ActionRow
                   key={action}
                   label={action}
-                  done={done[`week:${action}`]}
-                  onToggle={() => toggle(`week:${action}`)}
+                  done={
+                    done[`week:${action}`] ??
+                    Boolean(
+                      actions.data?.find(
+                        (saved) => saved.horizon === 'this_week' && saved.title === action,
+                      )?.completed_at,
+                    )
+                  }
+                  onToggle={() => toggle(`week:${action}`, 'this_week', action)}
                 />
               ))}
             </View>
@@ -198,7 +302,15 @@ export default function DoScreen() {
       </ScrollView>
 
       <View className="pb-safe-offset-3 border-border bg-surface border-t px-5 pt-3">
-        <Button size="lg" isDisabled={!plan} onPress={() => router.push('/reset/why')}>
+        <Button
+          size="lg"
+          isDisabled={!plan}
+          onPress={async () => {
+            if (!sessionId) return;
+            await updateSession.mutateAsync({ sessionId, patch: { stage: 'why' } });
+            router.push(resetRouteAtIndex(sessionId, 4));
+          }}
+        >
           <Button.Label>One last thing</Button.Label>
         </Button>
       </View>

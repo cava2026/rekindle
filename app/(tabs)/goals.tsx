@@ -2,34 +2,42 @@ import { useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Button, Typography } from 'heroui-native';
-import { Plus, Trash2 } from 'lucide-react-native';
+import { ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 
 import { DisclaimerNote } from '@/components/DisclaimerNote';
-import { GoalRow } from '@/components/GoalRow';
 import { SectionCard } from '@/components/SectionCard';
 import { BRAND_HEX } from '@/lib/content';
-import { todayKey, useArchiveGoal, useGoalLogs, useGoals, useToggleGoalLog } from '@/lib/queries';
+import {
+  useArchiveGoal,
+  useGoalActionLogs,
+  useGoalActions,
+  useGoals,
+} from '@/lib/queries';
 
 export default function GoalsScreen() {
   const goals = useGoals();
-  const goalLogs = useGoalLogs(14);
-  const toggleGoal = useToggleGoalLog();
+  const actions = useGoalActions();
+  const actionLogs = useGoalActionLogs(90);
   const archiveGoal = useArchiveGoal();
-  const today = todayKey();
 
-  const doneToday = useMemo(
+  const completedActionIds = useMemo(
     () =>
-      new Set((goalLogs.data ?? []).filter((log) => log.log_date === today).map((l) => l.goal_id)),
-    [goalLogs.data, today],
+      new Set(
+        (actionLogs.data ?? [])
+          .filter((log) => log.status === 'completed')
+          .map((log) => log.goal_action_id),
+      ),
+    [actionLogs.data],
   );
-
-  const countByGoal = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const log of goalLogs.data ?? []) {
-      counts.set(log.goal_id, (counts.get(log.goal_id) ?? 0) + 1);
+  const actionsByGoal = useMemo(() => {
+    const grouped = new Map<string, NonNullable<typeof actions.data>>();
+    for (const action of actions.data ?? []) {
+      const current = grouped.get(action.goal_id) ?? [];
+      current.push(action);
+      grouped.set(action.goal_id, current);
     }
-    return counts;
-  }, [goalLogs.data]);
+    return grouped;
+  }, [actions.data]);
 
   const list = goals.data ?? [];
 
@@ -41,7 +49,7 @@ export default function GoalsScreen() {
     >
       <SectionCard
         title="Goals and priorities"
-        subtitle="Small and repeatable beats ambitious and abandoned."
+        subtitle="Keep 1–3 active goals so your attention has somewhere clear to go."
         right={
           <Button size="sm" variant="secondary" onPress={() => router.push('/goal-new')}>
             <Button.Label className="flex-row items-center gap-1.5">
@@ -62,30 +70,67 @@ export default function GoalsScreen() {
           </View>
         ) : (
           <View className="gap-2">
-            {list.map((goal) => (
-              <GoalRow
-                key={goal.id}
-                goal={goal}
-                done={doneToday.has(goal.id)}
-                loggedDays={countByGoal.get(goal.id) ?? 0}
-                onToggle={() =>
-                  toggleGoal.mutate({ goalId: goal.id, done: !doneToday.has(goal.id) })
-                }
-                right={
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="ghost"
-                    accessibilityLabel={`Remove ${goal.title}`}
-                    onPress={() => archiveGoal.mutate(goal.id)}
-                  >
-                    <Button.Label>
-                      <Trash2 size={16} color={BRAND_HEX.muted} />
-                    </Button.Label>
-                  </Button>
-                }
-              />
-            ))}
+            {list.map((goal) => {
+              const goalActions = actionsByGoal.get(goal.id) ?? [];
+              const completed = goalActions.filter((action) => completedActionIds.has(action.id)).length;
+              const progress = goalActions.length ? Math.round((completed / goalActions.length) * 100) : 0;
+              return (
+                <View
+                  key={goal.id}
+                  className="border-border bg-surface gap-2 rounded-2xl border px-3 py-3"
+                >
+                  <View className="flex-row items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      className="h-auto flex-1 items-start px-0"
+                      onPress={() =>
+                        router.push({ pathname: '/goal/[id]', params: { id: goal.id } })
+                      }
+                    >
+                      <Button.Label className="w-full items-start gap-1">
+                        <Typography className="text-foreground text-sm font-semibold">
+                          {goal.title}
+                        </Typography>
+                        <Typography className="text-muted text-xs">
+                          {goal.kind === 'habit'
+                            ? 'Habit'
+                            : `${completed} of ${goalActions.length} steps completed`}
+                        </Typography>
+                      </Button.Label>
+                    </Button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
+                      accessibilityLabel={`Open ${goal.title}`}
+                      onPress={() =>
+                        router.push({ pathname: '/goal/[id]', params: { id: goal.id } })
+                      }
+                    >
+                      <Button.Label>
+                        <ChevronRight size={17} color={BRAND_HEX.muted} />
+                      </Button.Label>
+                    </Button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
+                      accessibilityLabel={`Remove ${goal.title}`}
+                      onPress={() => archiveGoal.mutate(goal.id)}
+                    >
+                      <Button.Label>
+                        <Trash2 size={16} color={BRAND_HEX.muted} />
+                      </Button.Label>
+                    </Button>
+                  </View>
+                  {goal.kind === 'outcome' && goalActions.length > 0 ? (
+                    <View className="bg-background-tertiary h-1.5 overflow-hidden rounded-full">
+                      <View className="bg-lavender h-full rounded-full" style={{ width: `${progress}%` }} />
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         )}
       </SectionCard>

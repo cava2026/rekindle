@@ -18,40 +18,57 @@ type ResetStageHeaderProps = {
   stage: number;
   title: string;
   subtitle?: string;
+  maxStage?: number;
+  onStagePress?: (stage: number) => void;
   onClose?: () => void;
 };
 
-export function ResetStageHeader({ stage, title, subtitle, onClose }: ResetStageHeaderProps) {
+export function ResetStageHeader({
+  stage,
+  title,
+  subtitle,
+  maxStage = stage,
+  onStagePress,
+  onClose,
+}: ResetStageHeaderProps) {
   return (
     <View className="pt-safe-offset-2 bg-background gap-4 px-5 pb-3">
       <View className="flex-row items-center justify-between gap-3">
         <View className="flex-row items-center gap-1.5">
-          {RESET_STAGES.map((item, index) => (
-            <View
-              key={item.name}
-              className={cn(
-                'h-8 w-8 items-center justify-center rounded-xl',
-                index === stage
-                  ? 'bg-lavender'
-                  : index < stage
-                    ? 'bg-lavender-soft'
-                    : 'bg-background-tertiary',
-              )}
-            >
-              <Typography
+          {RESET_STAGES.map((item, index) => {
+            const enabled = Boolean(onStagePress) && index <= maxStage && index !== stage;
+            return (
+              <GesturePressable
+                key={item.name}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.letter}: ${item.name}`}
+                accessibilityState={{ disabled: !enabled, selected: index === stage }}
+                disabled={!enabled}
+                onPress={() => onStagePress?.(index)}
                 className={cn(
-                  'text-sm font-bold',
+                  'h-10 w-10 items-center justify-center rounded-xl',
                   index === stage
-                    ? 'text-white'
-                    : index < stage
-                      ? 'text-lavender-deep'
-                      : 'text-muted',
+                    ? 'bg-lavender'
+                    : index <= maxStage
+                      ? 'bg-lavender-soft'
+                      : 'bg-background-tertiary',
                 )}
               >
-                {item.letter}
-              </Typography>
-            </View>
-          ))}
+                <Typography
+                  className={cn(
+                    'text-base font-bold',
+                    index === stage
+                      ? 'text-white'
+                      : index <= maxStage
+                        ? 'text-lavender-deep'
+                        : 'text-muted',
+                  )}
+                >
+                  {item.letter}
+                </Typography>
+              </GesturePressable>
+            );
+          })}
         </View>
 
         {onClose ? (

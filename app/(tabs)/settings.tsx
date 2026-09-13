@@ -124,7 +124,15 @@ export default function SettingsScreen() {
         </View>
       </SectionCard>
 
-      <SectionCard title="Your resets" subtitle="Sessions you completed with the B.U.D.D.Y. method">
+      <SectionCard
+        title="Your resets"
+        subtitle="Sessions you completed with the B.U.D.D.Y. method"
+        right={
+          <Button size="sm" variant="secondary" onPress={() => router.push('/reset/history')}>
+            <Button.Label>Review</Button.Label>
+          </Button>
+        }
+      >
         <Typography className="text-muted text-sm leading-5">
           {(resets.data?.length ?? 0) === 0
             ? 'No completed resets yet. The overwhelmed button on Today starts one.'

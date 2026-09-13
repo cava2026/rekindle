@@ -4,8 +4,10 @@ import { router } from 'expo-router';
 import { Button, Spinner, TextArea, Typography } from 'heroui-native';
 
 import { ResetStageHeader } from '@/components/ResetStageHeader';
+import { useResetSessionFlow } from '@/hooks/useResetSessionFlow';
 import { CoachUnavailableError, reflectOnWhy } from '@/lib/coach';
 import { useCoachContext, useGoals, useUpdateResetSession } from '@/lib/queries';
+import { resetRouteAtIndex } from '@/lib/navigation';
 import { useResetFlow } from '@/lib/resetStore';
 import { containsCrisisLanguage } from '@/lib/safety';
 
@@ -13,7 +15,8 @@ const DEFAULT_PROMPT =
   'Which of these commitments is most connected to the life you want to build?';
 
 export default function WhyScreen() {
-  const sessionId = useResetFlow((state) => state.sessionId);
+  const flow = useResetSessionFlow();
+  const sessionId = flow.sessionId;
   const plan = useResetFlow((state) => state.plan);
   const setWhyResponse = useResetFlow((state) => state.setWhyResponse);
   const resetFlow = useResetFlow((state) => state.reset);
@@ -22,9 +25,10 @@ export default function WhyScreen() {
   const context = useCoachContext();
   const updateSession = useUpdateResetSession();
 
-  const [text, setText] = useState('');
+  const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reflectionText = text ?? flow.session.data?.why_reflection ?? '';
 
   const prompt = plan?.why_prompt ?? DEFAULT_PROMPT;
 
@@ -34,7 +38,7 @@ export default function WhyScreen() {
   };
 
   const handleContinue = async () => {
-    if (containsCrisisLanguage(text)) {
+    if (containsCrisisLanguage(reflectionText)) {
       router.replace('/crisis');
       return;
     }
@@ -45,23 +49,29 @@ export default function WhyScreen() {
       if (sessionId) {
         await updateSession.mutateAsync({
           sessionId,
-          patch: { stage: 'why', why_prompt: prompt, why_reflection: text },
+          patch: { stage: 'why', why_prompt: prompt, why_reflection: reflectionText },
         });
       }
 
       try {
-        const result = await reflectOnWhy(text, prompt, context);
+        const result = await reflectOnWhy(reflectionText, prompt, context);
         if (result.crisis) {
           router.replace('/crisis');
           return;
         }
         setWhyResponse(result.response, result.closing_line);
+        if (sessionId) {
+          await updateSession.mutateAsync({
+            sessionId,
+            patch: { coach_summary: result.response, closing_line: result.closing_line },
+          });
+        }
       } catch (caught) {
         if (!(caught instanceof CoachUnavailableError)) throw caught;
         setWhyResponse('', '');
       }
 
-      router.push('/reset/summary');
+      if (sessionId) router.push(resetRouteAtIndex(sessionId, 5));
     } catch {
       setError('That did not save. Please try again.');
     } finally {
@@ -78,6 +88,8 @@ export default function WhyScreen() {
         stage={4}
         title="Your why"
         subtitle="The part that makes the rest worth it."
+        maxStage={flow.maxStage}
+        onStagePress={flow.onStagePress}
         onClose={close}
       />
 
@@ -109,7 +121,7 @@ export default function WhyScreen() {
         ) : null}
 
         <TextArea
-          value={text}
+          value={reflectionText}
           onChangeText={setText}
           placeholder="Write freely. Values, people, the version of your life you are working toward."
           multiline
@@ -127,7 +139,7 @@ export default function WhyScreen() {
         {error ? <Typography className="text-danger text-xs">{error}</Typography> : null}
         <Button
           size="lg"
-          isDisabled={text.trim().length < 3 || busy}
+          isDisabled={reflectionText.trim().length < 3 || busy}
           onPress={() => void handleContinue()}
         >
           <Button.Label className="flex-row items-center gap-2">
@@ -135,7 +147,14 @@ export default function WhyScreen() {
             Finish my reset
           </Button.Label>
         </Button>
-        <Button variant="ghost" onPress={() => router.push('/reset/summary')}>
+        <Button
+          variant="ghost"
+          onPress={async () => {
+            if (!sessionId) return;
+            await updateSession.mutateAsync({ sessionId, patch: { stage: 'why' } });
+            router.push(resetRouteAtIndex(sessionId, 5));
+          }}
+        >
           <Button.Label>Skip this part</Button.Label>
         </Button>
       </View>

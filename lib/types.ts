@@ -4,10 +4,17 @@ export type Profile = Tables<'profiles'>;
 export type Baseline = Tables<'wellbeing_baseline'>;
 export type Goal = Tables<'goals'>;
 export type GoalLog = Tables<'goal_logs'>;
+export type GoalAction = Tables<'goal_actions'>;
+export type GoalActionLog = Tables<'goal_action_logs'>;
 export type Checkin = Tables<'checkins'>;
 export type ResetSession = Tables<'reset_sessions'>;
 export type ResetItem = Tables<'reset_items'>;
+export type ResetAction = Tables<'reset_actions'>;
 export type Insight = Tables<'insights'>;
+
+export const RESET_STAGE_ORDER = ['unpack', 'decide', 'do', 'why', 'complete'] as const;
+export type ResetStage = (typeof RESET_STAGE_ORDER)[number];
+export type ResetActionHorizon = ResetAction['horizon'];
 
 export const RESET_CATEGORIES = [
   'work',

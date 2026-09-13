@@ -5,21 +5,25 @@ import { Button, Spinner, Typography } from 'heroui-native';
 
 import { ResetStageHeader } from '@/components/ResetStageHeader';
 import { GesturePressable } from '@/components/ui/primitives/GesturePressable';
+import { useResetSessionFlow } from '@/hooks/useResetSessionFlow';
 import { DECISION_HINTS, DECISION_LABELS } from '@/lib/content';
-import { useResetItems, useSetItemDecision } from '@/lib/queries';
+import { useResetItems, useSetItemDecision, useUpdateResetSession } from '@/lib/queries';
+import { resetRouteAtIndex } from '@/lib/navigation';
 import { useResetFlow } from '@/lib/resetStore';
 import { DECISIONS } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 export default function DecideScreen() {
-  const sessionId = useResetFlow((state) => state.sessionId);
+  const flow = useResetSessionFlow();
+  const sessionId = flow.sessionId;
   const resetFlow = useResetFlow((state) => state.reset);
   const items = useResetItems(sessionId);
   const setDecision = useSetItemDecision();
+  const updateSession = useUpdateResetSession();
 
   useEffect(() => {
-    if (!sessionId) router.replace('/reset/brain-dump');
-  }, [sessionId]);
+    if (!flow.session.isLoading && !sessionId) router.replace('/reset/brain-dump');
+  }, [flow.session.isLoading, sessionId]);
 
   const list = items.data ?? [];
   const sorted = list.filter((item) => item.decision != null).length;
@@ -44,6 +48,8 @@ export default function DecideScreen() {
         stage={2}
         title="What actually matters today?"
         subtitle="Sort each one. Deciding something can wait, or can go, is progress too."
+        maxStage={flow.maxStage}
+        onStagePress={flow.onStagePress}
         onClose={close}
       />
 
@@ -124,7 +130,15 @@ export default function DecideScreen() {
             <Button.Label>Put the rest under &quot;can wait&quot;</Button.Label>
           </Button>
         ) : null}
-        <Button size="lg" isDisabled={remaining > 0} onPress={() => router.push('/reset/do')}>
+        <Button
+          size="lg"
+          isDisabled={remaining > 0}
+          onPress={async () => {
+            if (!sessionId) return;
+            await updateSession.mutateAsync({ sessionId, patch: { stage: 'do' } });
+            router.push(resetRouteAtIndex(sessionId, 3));
+          }}
+        >
           <Button.Label>Give me my next step</Button.Label>
         </Button>
       </View>

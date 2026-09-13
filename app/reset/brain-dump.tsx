@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Button, Spinner, TextArea, Typography } from 'heroui-native';
@@ -9,9 +9,12 @@ import { COACH_UNAVAILABLE_MESSAGE } from '@/lib/content';
 import {
   useCoachContext,
   useCreateResetSession,
+  useSaveResetActions,
   useSaveResetItems,
   useUpdateResetSession,
 } from '@/lib/queries';
+import { resetRoute } from '@/lib/navigation';
+import { useResetSessionFlow } from '@/hooks/useResetSessionFlow';
 import { useResetFlow } from '@/lib/resetStore';
 import { containsCrisisLanguage } from '@/lib/safety';
 import type { CoachItem } from '@/lib/types';
@@ -25,8 +28,10 @@ const PROMPTS = [
 ];
 
 export default function BrainDumpScreen() {
+  const flow = useResetSessionFlow();
   const context = useCoachContext();
   const createSession = useCreateResetSession();
+  const saveActions = useSaveResetActions();
   const saveItems = useSaveResetItems();
   const updateSession = useUpdateResetSession();
   const start = useResetFlow((state) => state.start);
@@ -35,6 +40,13 @@ export default function BrainDumpScreen() {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedSessionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!flow.session.data || loadedSessionRef.current === flow.session.data.id) return;
+    loadedSessionRef.current = flow.session.data.id;
+    setText(flow.session.data.brain_dump);
+  }, [flow.session.data]);
 
   const close = () => {
     resetFlow();
@@ -50,7 +62,25 @@ export default function BrainDumpScreen() {
     setBusy(true);
     setError(null);
     try {
-      const session = await createSession.mutateAsync(text);
+      if (flow.sessionId && !flow.session.data) return;
+      const session = flow.session.data ?? (await createSession.mutateAsync(text));
+
+      if (flow.sessionId) {
+        await updateSession.mutateAsync({
+          sessionId: session.id,
+          patch: {
+            brain_dump: text,
+            stage: 'unpack',
+            completed_at: null,
+            plan_generated_at: null,
+            why_prompt: null,
+            why_reflection: null,
+            coach_summary: null,
+            closing_line: null,
+          },
+        });
+        await saveActions.mutateAsync({ sessionId: session.id, actions: [] });
+      }
 
       let items: CoachItem[] = [];
       let reflection = '';
@@ -79,6 +109,10 @@ export default function BrainDumpScreen() {
       }
 
       await saveItems.mutateAsync({ sessionId: session.id, items });
+      await updateSession.mutateAsync({
+        sessionId: session.id,
+        patch: { stage: 'unpack', coach_degraded: degraded },
+      });
       start({
         sessionId: session.id,
         brainDump: text,
@@ -86,7 +120,7 @@ export default function BrainDumpScreen() {
         items,
         degraded,
       });
-      router.push('/reset/unpack');
+      router.push(resetRoute(session.id, 'unpack'));
     } catch {
       setError('Buddy could not start this reset. Please try again in a moment.');
     } finally {
@@ -103,6 +137,8 @@ export default function BrainDumpScreen() {
         stage={0}
         title="Empty it all out"
         subtitle="Thoughts, worries, projects, tasks, commitments, frustrations. No order, no judgement. Buddy sorts it next."
+        maxStage={flow.maxStage}
+        onStagePress={flow.onStagePress}
         onClose={close}
       />
 
@@ -143,7 +179,7 @@ export default function BrainDumpScreen() {
         {error ? <Typography className="text-danger text-xs">{error}</Typography> : null}
         <Button
           size="lg"
-          isDisabled={text.trim().length < 8 || busy}
+          isDisabled={text.trim().length < 8 || busy || flow.session.isLoading}
           onPress={() => void handleContinue()}
         >
           <Button.Label className="flex-row items-center gap-2">

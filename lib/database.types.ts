@@ -55,6 +55,85 @@ declare module '@biltme/backend' {
           };
           Relationships: [];
         };
+        goal_action_logs: {
+          Row: {
+            id: string;
+            user_id: string;
+            goal_action_id: string;
+            log_date: string;
+            status: 'completed' | 'skipped';
+            created_at: string;
+          };
+          Insert: {
+            id?: string;
+            user_id: string;
+            goal_action_id: string;
+            log_date?: string;
+            status?: 'completed' | 'skipped';
+            created_at?: string;
+          };
+          Update: {
+            id?: string;
+            user_id?: string;
+            goal_action_id?: string;
+            log_date?: string;
+            status?: 'completed' | 'skipped';
+            created_at?: string;
+          };
+          Relationships: [
+            {
+              foreignKeyName: 'goal_action_logs_action_owner_fkey';
+              columns: ['goal_action_id', 'user_id'];
+              isOneToOne: false;
+              referencedRelation: 'goal_actions';
+              referencedColumns: ['id', 'user_id'];
+            },
+          ];
+        };
+        goal_actions: {
+          Row: {
+            id: string;
+            user_id: string;
+            goal_id: string;
+            title: string;
+            schedule_days: number[];
+            sort: number;
+            is_active: boolean;
+            created_at: string;
+            updated_at: string;
+          };
+          Insert: {
+            id?: string;
+            user_id: string;
+            goal_id: string;
+            title: string;
+            schedule_days?: number[];
+            sort?: number;
+            is_active?: boolean;
+            created_at?: string;
+            updated_at?: string;
+          };
+          Update: {
+            id?: string;
+            user_id?: string;
+            goal_id?: string;
+            title?: string;
+            schedule_days?: number[];
+            sort?: number;
+            is_active?: boolean;
+            created_at?: string;
+            updated_at?: string;
+          };
+          Relationships: [
+            {
+              foreignKeyName: 'goal_actions_goal_owner_fkey';
+              columns: ['goal_id', 'user_id'];
+              isOneToOne: false;
+              referencedRelation: 'goals';
+              referencedColumns: ['id', 'user_id'];
+            },
+          ];
+        };
         goal_logs: {
           Row: {
             id: string;
@@ -97,6 +176,12 @@ declare module '@biltme/backend' {
             sort: number;
             created_at: string;
             archived_at: string | null;
+            kind: 'habit' | 'outcome';
+            description: string | null;
+            target_date: string | null;
+            habit_days: number[];
+            status: 'active' | 'paused' | 'completed' | 'archived';
+            updated_at: string;
           };
           Insert: {
             id?: string;
@@ -107,6 +192,12 @@ declare module '@biltme/backend' {
             sort?: number;
             created_at?: string;
             archived_at?: string | null;
+            kind?: 'habit' | 'outcome';
+            description?: string | null;
+            target_date?: string | null;
+            habit_days?: number[];
+            status?: 'active' | 'paused' | 'completed' | 'archived';
+            updated_at?: string;
           };
           Update: {
             id?: string;
@@ -117,6 +208,12 @@ declare module '@biltme/backend' {
             sort?: number;
             created_at?: string;
             archived_at?: string | null;
+            kind?: 'habit' | 'outcome';
+            description?: string | null;
+            target_date?: string | null;
+            habit_days?: number[];
+            status?: 'active' | 'paused' | 'completed' | 'archived';
+            updated_at?: string;
           };
           Relationships: [];
         };
@@ -198,6 +295,47 @@ declare module '@biltme/backend' {
           };
           Relationships: [];
         };
+        reset_actions: {
+          Row: {
+            id: string;
+            user_id: string;
+            session_id: string;
+            title: string;
+            horizon: 'next_five_minutes' | 'today' | 'this_week';
+            sort: number;
+            completed_at: string | null;
+            created_at: string;
+          };
+          Insert: {
+            id?: string;
+            user_id: string;
+            session_id: string;
+            title: string;
+            horizon: 'next_five_minutes' | 'today' | 'this_week';
+            sort?: number;
+            completed_at?: string | null;
+            created_at?: string;
+          };
+          Update: {
+            id?: string;
+            user_id?: string;
+            session_id?: string;
+            title?: string;
+            horizon?: 'next_five_minutes' | 'today' | 'this_week';
+            sort?: number;
+            completed_at?: string | null;
+            created_at?: string;
+          };
+          Relationships: [
+            {
+              foreignKeyName: 'reset_actions_session_owner_fkey';
+              columns: ['session_id', 'user_id'];
+              isOneToOne: false;
+              referencedRelation: 'reset_sessions';
+              referencedColumns: ['id', 'user_id'];
+            },
+          ];
+        };
         reset_items: {
           Row: {
             id: string;
@@ -257,6 +395,10 @@ declare module '@biltme/backend' {
             crisis_flagged: boolean;
             completed_at: string | null;
             created_at: string;
+            updated_at: string;
+            plan_generated_at: string | null;
+            coach_degraded: boolean;
+            closing_line: string | null;
           };
           Insert: {
             id?: string;
@@ -269,6 +411,10 @@ declare module '@biltme/backend' {
             crisis_flagged?: boolean;
             completed_at?: string | null;
             created_at?: string;
+            updated_at?: string;
+            plan_generated_at?: string | null;
+            coach_degraded?: boolean;
+            closing_line?: string | null;
           };
           Update: {
             id?: string;
@@ -281,6 +427,10 @@ declare module '@biltme/backend' {
             crisis_flagged?: boolean;
             completed_at?: string | null;
             created_at?: string;
+            updated_at?: string;
+            plan_generated_at?: string | null;
+            coach_degraded?: boolean;
+            closing_line?: string | null;
           };
           Relationships: [];
         };

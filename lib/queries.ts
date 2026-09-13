@@ -13,9 +13,14 @@ import type {
   CoachContext,
   Decision,
   Goal,
+  GoalAction,
+  GoalActionLog,
   GoalLog,
   Insight,
   Profile,
+  ResetAction,
+  ResetActionHorizon,
+  ResetCategory,
   ResetItem,
   ResetSession,
 } from '@/lib/types';
@@ -27,11 +32,16 @@ export const qk = {
   profile: (uid: string) => ['profile', uid] as const,
   baseline: (uid: string) => ['baseline', uid] as const,
   goals: (uid: string) => ['goals', uid] as const,
-  goalLogs: (uid: string) => ['goalLogs', uid] as const,
-  checkins: (uid: string) => ['checkins', uid] as const,
+  goalActions: (uid: string, goalId?: string) => ['goalActions', uid, goalId ?? 'all'] as const,
+  goalActionLogs: (uid: string, days: number) => ['goalActionLogs', uid, days] as const,
+  goalLogs: (uid: string, days: number) => ['goalLogs', uid, days] as const,
+  checkins: (uid: string, days: number) => ['checkins', uid, days] as const,
   insights: (uid: string) => ['insights', uid] as const,
+  resetSessions: (uid: string, scope: 'all' | 'completed' | 'active' = 'all') =>
+    ['resetSessions', uid, scope] as const,
   resetSession: (id: string) => ['resetSession', id] as const,
   resetItems: (id: string) => ['resetItems', id] as const,
+  resetActions: (id: string) => ['resetActions', id] as const,
 };
 
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
@@ -115,18 +125,219 @@ export function useAddGoals() {
       goals: { title: string; category?: string | null; is_custom?: boolean }[],
     ) => {
       if (goals.length === 0) return;
-      const { error } = await bilt.from('goals').insert(
-        goals.map((goal, index) => ({
+      const { data: created, error } = await bilt
+        .from('goals')
+        .insert(
+          goals.map((goal, index) => ({
+            user_id: userId!,
+            title: goal.title,
+            category: goal.category ?? null,
+            is_custom: goal.is_custom ?? false,
+            sort: index,
+            kind: 'habit' as const,
+            habit_days: [0, 1, 2, 3, 4, 5, 6],
+          })),
+        )
+        .select('*');
+      if (error) throw new Error(error.message);
+      if (created && created.length > 0) {
+        const { error: actionError } = await bilt.from('goal_actions').insert(
+          created.map((goal) => ({
+            user_id: userId!,
+            goal_id: goal.id,
+            title: goal.title,
+            schedule_days: goal.habit_days,
+          })),
+        );
+        if (actionError) throw new Error(actionError.message);
+      }
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: qk.goals(userId ?? 'anon') });
+      void client.invalidateQueries({ queryKey: ['goalActions', userId ?? 'anon'] });
+    },
+  });
+}
+
+export function useCreateGoal() {
+  const { userId } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      title,
+      category,
+      kind,
+      habitDays,
+      actions,
+    }: {
+      title: string;
+      category?: string | null;
+      kind: Goal['kind'];
+      habitDays: number[];
+      actions: string[];
+    }) => {
+      const { data: goal, error } = await bilt
+        .from('goals')
+        .insert({
           user_id: userId!,
-          title: goal.title,
-          category: goal.category ?? null,
-          is_custom: goal.is_custom ?? false,
-          sort: index,
-        })),
+          title,
+          category: category ?? null,
+          is_custom: true,
+          kind,
+          habit_days: habitDays,
+        })
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+
+      const actionTitles = kind === 'habit' ? [title] : actions.filter((action) => action.trim());
+      if (actionTitles.length > 0) {
+        const { error: actionError } = await bilt.from('goal_actions').insert(
+          actionTitles.map((actionTitle, index) => ({
+            user_id: userId!,
+            goal_id: goal.id,
+            title: actionTitle.trim(),
+            schedule_days: kind === 'habit' ? habitDays : [],
+            sort: index,
+          })),
+        );
+        if (actionError) throw new Error(actionError.message);
+      }
+      return goal;
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: qk.goals(userId ?? 'anon') });
+      void client.invalidateQueries({ queryKey: ['goalActions', userId ?? 'anon'] });
+    },
+  });
+}
+
+export function useGoalActions(goalId?: string) {
+  const { userId } = useAuth();
+  return useQuery({
+    queryKey: qk.goalActions(userId ?? 'anon', goalId),
+    enabled: Boolean(userId),
+    queryFn: async (): Promise<GoalAction[]> => {
+      let query = bilt
+        .from('goal_actions')
+        .select('*')
+        .eq('user_id', userId!)
+        .eq('is_active', true)
+        .order('sort', { ascending: true });
+      if (goalId) query = query.eq('goal_id', goalId);
+      return unwrap(await query) ?? [];
+    },
+  });
+}
+
+export function useGoalActionLogs(days = 30) {
+  const { userId } = useAuth();
+  return useQuery({
+    queryKey: qk.goalActionLogs(userId ?? 'anon', days),
+    enabled: Boolean(userId),
+    queryFn: async (): Promise<GoalActionLog[]> =>
+      unwrap(
+        await bilt
+          .from('goal_action_logs')
+          .select('*')
+          .eq('user_id', userId!)
+          .gte('log_date', dayKey(subDays(new Date(), days)))
+          .order('log_date', { ascending: false }),
+      ) ?? [],
+  });
+}
+
+export function useSaveGoalAction() {
+  const { userId } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      goalId,
+      title,
+      scheduleDays = [],
+      sort = 0,
+    }: {
+      id?: string;
+      goalId: string;
+      title: string;
+      scheduleDays?: number[];
+      sort?: number;
+    }) => {
+      if (id) {
+        const { error } = await bilt
+          .from('goal_actions')
+          .update({ title: title.trim(), schedule_days: scheduleDays })
+          .eq('id', id)
+          .eq('user_id', userId!);
+        if (error) throw new Error(error.message);
+        return;
+      }
+      const { error } = await bilt.from('goal_actions').insert({
+        user_id: userId!,
+        goal_id: goalId,
+        title: title.trim(),
+        schedule_days: scheduleDays,
+        sort,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['goalActions', userId ?? 'anon'] }),
+  });
+}
+
+export function useArchiveGoalAction() {
+  const { userId } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (actionId: string) => {
+      const { error } = await bilt
+        .from('goal_actions')
+        .update({ is_active: false })
+        .eq('id', actionId)
+        .eq('user_id', userId!);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['goalActions', userId ?? 'anon'] }),
+  });
+}
+
+export function useSetGoalActionStatus() {
+  const { userId } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      actionId,
+      status,
+    }: {
+      actionId: string;
+      status: GoalActionLog['status'] | null;
+    }) => {
+      if (status === null) {
+        const { error } = await bilt
+          .from('goal_action_logs')
+          .delete()
+          .eq('goal_action_id', actionId)
+          .eq('log_date', todayKey())
+          .eq('user_id', userId!);
+        if (error) throw new Error(error.message);
+        return;
+      }
+      const { error } = await bilt.from('goal_action_logs').upsert(
+        {
+          user_id: userId!,
+          goal_action_id: actionId,
+          log_date: todayKey(),
+          status,
+        },
+        { onConflict: 'user_id,goal_action_id,log_date' },
       );
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: qk.goals(userId ?? 'anon') }),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['goalActionLogs', userId ?? 'anon'] }),
   });
 }
 
@@ -148,7 +359,7 @@ export function useArchiveGoal() {
 export function useGoalLogs(days = 14) {
   const { userId } = useAuth();
   return useQuery({
-    queryKey: qk.goalLogs(userId ?? 'anon'),
+    queryKey: qk.goalLogs(userId ?? 'anon', days),
     enabled: Boolean(userId),
     queryFn: async (): Promise<GoalLog[]> =>
       unwrap(
@@ -181,14 +392,14 @@ export function useToggleGoalLog() {
         .eq('log_date', todayKey());
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: qk.goalLogs(userId ?? 'anon') }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['goalLogs', userId ?? 'anon'] }),
   });
 }
 
 export function useCheckins(days = 30) {
   const { userId } = useAuth();
   return useQuery({
-    queryKey: qk.checkins(userId ?? 'anon'),
+    queryKey: qk.checkins(userId ?? 'anon', days),
     enabled: Boolean(userId),
     queryFn: async (): Promise<Checkin[]> =>
       unwrap(
@@ -218,7 +429,7 @@ export function useSaveCheckin() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: qk.checkins(userId ?? 'anon') });
+      void client.invalidateQueries({ queryKey: ['checkins', userId ?? 'anon'] });
     },
   });
 }
@@ -311,8 +522,24 @@ export function useResetItems(sessionId: string | null) {
   });
 }
 
+export function useResetActions(sessionId: string | null) {
+  return useQuery({
+    queryKey: qk.resetActions(sessionId ?? 'none'),
+    enabled: Boolean(sessionId),
+    queryFn: async (): Promise<ResetAction[]> =>
+      unwrap(
+        await bilt
+          .from('reset_actions')
+          .select('*')
+          .eq('session_id', sessionId!)
+          .order('sort', { ascending: true }),
+      ) ?? [],
+  });
+}
+
 export function useCreateResetSession() {
   const { userId } = useAuth();
+  const client = useQueryClient();
   return useMutation({
     mutationFn: async (brainDump: string): Promise<ResetSession> => {
       const row = unwrap<ResetSession>(
@@ -324,6 +551,7 @@ export function useCreateResetSession() {
       );
       return row;
     },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['resetSessions', userId ?? 'anon'] }),
   });
 }
 
@@ -336,9 +564,13 @@ export function useSaveResetItems() {
       items,
     }: {
       sessionId: string;
-      items: { content: string; category: string }[];
+      items: { content: string; category: ResetCategory }[];
     }) => {
-      await bilt.from('reset_items').delete().eq('session_id', sessionId);
+      const { error: deleteError } = await bilt
+        .from('reset_items')
+        .delete()
+        .eq('session_id', sessionId);
+      if (deleteError) throw new Error(deleteError.message);
       if (items.length === 0) return;
       const { error } = await bilt.from('reset_items').insert(
         items.map((item, index) => ({
@@ -406,8 +638,58 @@ export function useDeleteResetItem() {
   });
 }
 
+export function useSaveResetActions() {
+  const client = useQueryClient();
+  const { userId } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      actions,
+    }: {
+      sessionId: string;
+      actions: { title: string; horizon: ResetActionHorizon; sort: number }[];
+    }) => {
+      const { error: deleteError } = await bilt
+        .from('reset_actions')
+        .delete()
+        .eq('session_id', sessionId);
+      if (deleteError) throw new Error(deleteError.message);
+      if (actions.length === 0) return;
+      const { error } = await bilt
+        .from('reset_actions')
+        .insert(actions.map((action) => ({ ...action, session_id: sessionId, user_id: userId! })));
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_data, variables) =>
+      client.invalidateQueries({ queryKey: qk.resetActions(variables.sessionId) }),
+  });
+}
+
+export function useToggleResetAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      actionId,
+      completed,
+    }: {
+      actionId: string;
+      sessionId: string;
+      completed: boolean;
+    }) => {
+      const { error } = await bilt
+        .from('reset_actions')
+        .update({ completed_at: completed ? new Date().toISOString() : null })
+        .eq('id', actionId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_data, variables) =>
+      client.invalidateQueries({ queryKey: qk.resetActions(variables.sessionId) }),
+  });
+}
+
 export function useUpdateResetSession() {
   const client = useQueryClient();
+  const { userId } = useAuth();
   return useMutation({
     mutationFn: async ({
       sessionId,
@@ -416,18 +698,59 @@ export function useUpdateResetSession() {
       sessionId: string;
       patch: Partial<ResetSession>;
     }) => {
-      const { error } = await bilt.from('reset_sessions').update(patch).eq('id', sessionId);
+      const { error } = await bilt
+        .from('reset_sessions')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', sessionId);
       if (error) throw new Error(error.message);
     },
-    onSuccess: (_data, variables) =>
-      client.invalidateQueries({ queryKey: qk.resetSession(variables.sessionId) }),
+    onSuccess: (_data, variables) => {
+      void client.invalidateQueries({ queryKey: qk.resetSession(variables.sessionId) });
+      void client.invalidateQueries({ queryKey: ['resetSessions', userId ?? 'anon'] });
+    },
+  });
+}
+
+export function useResetSessions() {
+  const { userId } = useAuth();
+  return useQuery({
+    queryKey: qk.resetSessions(userId ?? 'anon', 'all'),
+    enabled: Boolean(userId),
+    queryFn: async (): Promise<ResetSession[]> =>
+      unwrap(
+        await bilt
+          .from('reset_sessions')
+          .select('*')
+          .eq('user_id', userId!)
+          .order('updated_at', { ascending: false }),
+      ) ?? [],
+  });
+}
+
+export function useActiveResetSession() {
+  const { userId } = useAuth();
+  return useQuery({
+    queryKey: qk.resetSessions(userId ?? 'anon', 'active'),
+    enabled: Boolean(userId),
+    queryFn: async (): Promise<ResetSession | null> =>
+      unwrap(
+        await bilt
+          .from('reset_sessions')
+          .select('*')
+          .eq('user_id', userId!)
+          .is('completed_at', null)
+          .eq('crisis_flagged', false)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ),
   });
 }
 
 export function useRecentResetSessions() {
   const { userId } = useAuth();
   return useQuery({
-    queryKey: ['resetSessions', userId ?? 'anon'] as const,
+    queryKey: qk.resetSessions(userId ?? 'anon', 'completed'),
     enabled: Boolean(userId),
     queryFn: async (): Promise<ResetSession[]> =>
       unwrap(
@@ -436,7 +759,7 @@ export function useRecentResetSessions() {
           .select('*')
           .eq('user_id', userId!)
           .not('completed_at', 'is', null)
-          .order('created_at', { ascending: false })
+          .order('completed_at', { ascending: false })
           .limit(10),
       ) ?? [],
   });

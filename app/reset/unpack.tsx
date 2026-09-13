@@ -6,8 +6,15 @@ import { Sparkles, Trash2 } from 'lucide-react-native';
 
 import { ResetStageHeader } from '@/components/ResetStageHeader';
 import { GesturePressable } from '@/components/ui/primitives/GesturePressable';
+import { useResetSessionFlow } from '@/hooks/useResetSessionFlow';
 import { BRAND_HEX, categoryLabel, COACH_UNAVAILABLE_MESSAGE } from '@/lib/content';
-import { useDeleteResetItem, useResetItems, useSetItemCategory } from '@/lib/queries';
+import {
+  useDeleteResetItem,
+  useResetItems,
+  useSetItemCategory,
+  useUpdateResetSession,
+} from '@/lib/queries';
+import { resetRouteAtIndex } from '@/lib/navigation';
 import { useResetFlow } from '@/lib/resetStore';
 import { RESET_CATEGORIES, type ResetCategory } from '@/lib/types';
 
@@ -17,7 +24,8 @@ function nextCategory(current: string): ResetCategory {
 }
 
 export default function UnpackScreen() {
-  const sessionId = useResetFlow((state) => state.sessionId);
+  const flow = useResetSessionFlow();
+  const sessionId = flow.sessionId;
   const reflection = useResetFlow((state) => state.reflection);
   const degraded = useResetFlow((state) => state.coachDegraded);
   const resetFlow = useResetFlow((state) => state.reset);
@@ -25,10 +33,11 @@ export default function UnpackScreen() {
   const items = useResetItems(sessionId);
   const setCategory = useSetItemCategory();
   const deleteItem = useDeleteResetItem();
+  const updateSession = useUpdateResetSession();
 
   useEffect(() => {
-    if (!sessionId) router.replace('/reset/brain-dump');
-  }, [sessionId]);
+    if (!flow.session.isLoading && !sessionId) router.replace('/reset/brain-dump');
+  }, [flow.session.isLoading, sessionId]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, typeof items.data>();
@@ -51,6 +60,8 @@ export default function UnpackScreen() {
         stage={1}
         title="Here is what you are carrying"
         subtitle="Grouped so it stops feeling like one giant weight. Tap a label to move something, or remove what does not belong."
+        maxStage={flow.maxStage}
+        onStagePress={flow.onStagePress}
         onClose={close}
       />
 
@@ -144,7 +155,11 @@ export default function UnpackScreen() {
         <Button
           size="lg"
           isDisabled={(items.data?.length ?? 0) === 0}
-          onPress={() => router.push('/reset/decide')}
+          onPress={async () => {
+            if (!sessionId) return;
+            await updateSession.mutateAsync({ sessionId, patch: { stage: 'decide' } });
+            router.push(resetRouteAtIndex(sessionId, 2));
+          }}
         >
           <Button.Label>This looks right</Button.Label>
         </Button>
